@@ -34,7 +34,8 @@ def analyze_DP_data(	DP_data,
 						plot=False,
 						filename=None, 
 						plotall=False,
-						verbose=False):
+						verbose=False,
+						allow_for_V_and_I_offsets=True):
 	
 	"""
 	Analyzes a Double Langmuir Probe (DP) IV trace and provides density and temperature.  
@@ -107,13 +108,15 @@ def analyze_DP_data(	DP_data,
 
 	def _basic_DP_model(Vp, n0, xi, Voffset, Ioffset):
 		""" eq. 9 in Beal - basic DP model without advanced sheath expansion terms """
-		# return _I0(n0, xi) * 0.61 * _np.sqrt(2 * _np.pi) * _np.tanh((Vp - 0) / (2 * xi)) + 0
-		return _I0(n0, xi) * 0.61 * _np.sqrt(2 * _np.pi) * _np.tanh((Vp - Voffset) / (2 * xi)) + Ioffset
+		if allow_for_V_and_I_offsets==False:
+			return _I0(n0, xi) * 0.61 * _np.sqrt(2 * _np.pi) * _np.tanh((Vp - 0) / (2 * xi)) + 0
+		else:
+			return _I0(n0, xi) * 0.61 * _np.sqrt(2 * _np.pi) * _np.tanh((Vp - Voffset) / (2 * xi)) + Ioffset
 
 	def _expanded_DP_model(Vp, n0, xi, Voffset, Ioffset, a, b, V1):
 		""" eq. 7 in Beal - advanced DP model with advanced sheath expansion terms """
-		return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - 0) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - 0) / xi)**b) / (_np.exp((Vp - 0) / xi) + 1)) + 0
-		# return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - Voffset) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - Voffset) / xi)**b) / (_np.exp((Vp - Voffset) / xi) + 1)) + Ioffset
+		# return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - 0) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - 0) / xi)**b) / (_np.exp((Vp - 0) / xi) + 1)) + 0
+		return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - Voffset) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - Voffset) / xi)**b) / (_np.exp((Vp - Voffset) / xi) + 1)) + Ioffset
 
 	def fit_basic_DP_model(DP_data, guesses, plot=False):
 		""" fits to eq. 9 in Beal """
@@ -247,6 +250,7 @@ def analyze_DP_data(	DP_data,
 			# title = 'n0 = %.3e m^-3, temp = %.3f eV,\nr_probe = %.3e m, lambda_d = %.3e m' % (density, temp, probe_radius, lambda_d)
 			title = 'n0 = %.3e m^-3, temp = %.3f eV,\nr_probe / lambda_d = %.3f' % (density, temp, probe_radius / lambda_d)
 			ax.set_title(title)
+			fig.set_tight_layout(True)
 			
 			if type(filename) is not type(None):
 				fig.savefig(filename, dpi=150)
