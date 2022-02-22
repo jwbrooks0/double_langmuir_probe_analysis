@@ -19,6 +19,7 @@ This code is primarily based on:
 
 ### Notes
 - There is a discrepancy (possibly typos?) in the probe geometries between the two papers referenced above.  Specifically, I think the "radius" and "diameter" may have been accidentally swapped. 
+- Feel free to use and distribute this code for your own work.  However, acknowledgement is always appreciated.  
 
 ### Disclaimer
 I make no gaurantee as to the accuracy of this code although I will push any corrections that I discover.  If anyone else notices any issues, please let me know.  
