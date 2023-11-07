@@ -1,5 +1,5 @@
 ### double_langmuir_probe_analysis
-This is a (mostly faithful) reproduction of the double Langmuir probe analysis as described by Beal and Brown.  
+This is a (mostly faithful) reproduction of the double Langmuir probe analysis as described by Beal, Brown, and Lobbia.  
 
 ### Known differences between my implementation and the analysis in the papers.
 - I allow for an optional voltage and current offset during the fit.  
@@ -16,9 +16,11 @@ This code is primarily based on:
 	 - https://aip.scitation.org/doi/10.1063/1.4739221
 - Daniel Brown's "Experimental Assessment of Double Langmuir Probe Analysis Techniques in a Hall Thruster Plume".  
 	 - https://doi.org/10.2514/6.2012-3869
+- Robert Lobbia's "Recommended Practice for Use of Langmuir Probes in Electric Propulsion Testing".  
+	 - https://doi.org/10.2514/1.B35531
 
 ### Notes
-- There is a discrepancy (possibly typos?) in the probe geometries between the two papers referenced above.  Specifically, I think the "radius" and "diameter" may have been accidentally swapped. 
+- There is a discrepancy (possibly typos?) in the probe geometries between Beal and Brown's papers referenced above.  Specifically, I think the "radius" and "diameter" may have been accidentally swapped. 
 - Feel free to use and distribute this code for your own work.  However, acknowledgement is always appreciated.  
 
 ### Disclaimer

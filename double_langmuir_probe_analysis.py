@@ -21,13 +21,14 @@ _EP_0 = 1.0 / (_MU_0 * _C**2)  # vacuum permittivity
 
 #  Atomic masses
 _M_XE = 131.293 * _AMU 		# mass of xenon
-# _M_AR = 39.948 * _AMU 		# mass of argon
+_M_AR = 39.948 * _AMU 		# mass of argon
 
 
 # %% analyze_DP_data()
 def analyze_DP_data(	DP_data, 
 						probe_area, 
 						probe_radius, 
+                        probe_geom='cylindrical',
 						V_lim=[], 
 						m_i=_M_XE, 
 						guesses=(1e15, 2, 0, 0), 
@@ -35,7 +36,10 @@ def analyze_DP_data(	DP_data,
 						filename=None, 
 						plotall=False,
 						verbose=False,
-						allow_for_V_and_I_offsets=True):
+						allow_for_V_and_I_offsets=True,
+                        density_fit_lims=[-_np.infty, _np.infty],
+                        TeV_fit_lims=[-_np.infty, _np.infty],
+                        ):
 	
 	"""
 	Analyzes a Double Langmuir Probe (DP) IV trace and provides density and temperature.  
@@ -48,6 +52,8 @@ def analyze_DP_data(	DP_data,
 		Probe area in m^2
 	probe_radius : float
 		Probe radius in m
+    probe_geom : str
+        Geometry of probe.  Should be "planar", "cylindrical" or "spherical"
 	V_lim : list of two floats
 		Trims the voltage range of the data to between these two points
 	m_i : float
@@ -78,22 +84,34 @@ def analyze_DP_data(	DP_data,
 	This code is primarily based on Brian Beal's "Improved analysis techniques for cylindrical and spherical double probes" .
 	We also reference: Daniel Brown's "Experimental Assessment of Double Langmuir Probe Analysis Techniques in a Hall Thruster Plume".  
 	Citations below.
-	 * https://aip.scitation.org/doi/10.1063/1.4739221
+	 * https://aip.scitation.org/doi/10.1063/1.4739221 (cylindrical and spherical double Langmuir probe)
 	 * https://doi.org/10.2514/6.2012-3869
+     * https://doi.org/10.2514/1.B35531 (planar double Langmuir probe)
 	 
 	"""
 
 	from scipy.optimize import root_scalar, curve_fit
 	from functools import partial
+    
+    # check inputs
+	assert probe_geom in ["planar", "cylindrical", "spherical"], """
+    	probe_geom should be one of: planar, cylindrical, spherical"""
 
 	# rename parameters
-	A = probe_area  # 0.00032461
-	r_probe = probe_radius  # 0.0015875
+	A = probe_area 
+	r_probe = probe_radius  
 
 	# trim Voltage in data if requested
 	if V_lim != []:
 		DP_data = DP_data.where((DP_data.V >= V_lim[0]) & (DP_data.V <= V_lim[1])).dropna('V')
-
+        
+	# curve_fit limits: density, temp, Voffset, Ioffset
+	if allow_for_V_and_I_offsets is True:
+		bounds = ([density_fit_lims[0], TeV_fit_lims[0], -_np.infty, -_np.infty], [density_fit_lims[1], TeV_fit_lims[1], _np.infty, _np.infty])
+	else:
+		bounds = ([density_fit_lims[0], TeV_fit_lims[0]], [density_fit_lims[1], TeV_fit_lims[1]])
+	print(bounds)
+        
 	# %% subfunctions
 
 	def _lambda_d(temperature_in_eV, density):
@@ -118,13 +136,13 @@ def analyze_DP_data(	DP_data,
 		# return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - 0) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - 0) / xi)**b) / (_np.exp((Vp - 0) / xi) + 1)) + 0
 		return _I0(n0, xi) * (a * (-V1 / xi)**b * _np.tanh((Vp - Voffset) / (2 * xi)) + (a * (-V1 / xi)**b - a * (-(V1 + Vp - Voffset) / xi)**b) / (_np.exp((Vp - Voffset) / xi) + 1)) + Ioffset
 
-	def fit_basic_DP_model(DP_data, guesses, plot=False):
+	def fit_basic_DP_model(DP_data, guesses, bounds, plot=False):
 		""" fits to eq. 9 in Beal """
 		Vp = DP_data.V.data
 		Ip = DP_data.data
 
 		# perform fit
-		params_fit, _ = curve_fit(_basic_DP_model, Vp, Ip, guesses)
+		params_fit, _ = curve_fit(_basic_DP_model, Vp, Ip, guesses, bounds=bounds)
 		fit_data = _xr.DataArray(_basic_DP_model(Vp, *params_fit), dims=DP_data.dims, coords=DP_data.coords)
 
 		# optional plot
@@ -139,7 +157,7 @@ def analyze_DP_data(	DP_data,
 
 		return params_fit  # density, temp, Voffset, Ioffset
 
-	def fit_expanded_DP_model(DP_data, a, b, V1, guesses, plot=False):
+	def fit_expanded_DP_model(DP_data, a, b, V1, guesses, bounds, plot=False):
 		""" fits to eq. 7 in Beal """
 		Vp = DP_data.V.data
 		Ip = DP_data.data
@@ -148,7 +166,7 @@ def analyze_DP_data(	DP_data,
 		fitfun = partial(_expanded_DP_model, a=a, b=b, V1=V1)
 
 		# perform fit
-		params_fit, _ = curve_fit(fitfun, Vp, Ip, guesses)
+		params_fit, _ = curve_fit(fitfun, Vp, Ip, guesses, bounds=bounds) ## TODO implement optional bounds for the fit here
 		fit_data = _xr.DataArray(_expanded_DP_model(Vp, a=a, b=b, V1=V1, *params_fit), dims=DP_data.dims, coords=DP_data.coords, attrs=DP_data.attrs)
 
 		# optional plot
@@ -165,19 +183,39 @@ def analyze_DP_data(	DP_data,
 
 		return params_fit  # density, temp, Voffset, Ioffset
 
-	def solve_lambdad_a_b(density, temperature_in_eV, probe='cylindrical'):
-		""" Solves Table 1 in Beal (and the definition of debye length) for a, b, and lambda_d """
+	def solve_lambdad_a_b(density, temperature_in_eV, probe_geom):
+		""" Solves for the debye legngth and parameters a and b.
+        For planar probes: a and b come from Lobbia 2017
+        For cylindrical and spherical, a and b come from Beal 2012 """
 
 		# debye length definition
 		lambda_d = _lambda_d(temperature_in_eV, density)
 
 		# a and b terms from Table 1
-		if 'lindrical' in probe:
+		if 'cylindrical' in probe_geom:
 			a = 1.18 - 0.00080 * (r_probe / lambda_d)**1.35
 			b = 0.0684 + (0.722 + 0.928 * r_probe / lambda_d)**(-0.729)
+		elif "spherical" in probe_geom:
+			print("I've never tested this code with a spherical probe.  ")
+            ## these numbers of from Beal 2012
+			a = 1.98 + 4.49 * (r_probe / lambda_d) ** (-1.31)
+			b = -2.95 + 3.61 * (r_probe / lambda_d) ** (-0.125)
+            ## these numbers are from Lobbia 2017
+			#a = 1.58 + (-0.056 + 0.816 * (r_probe / lambda_d)) ** (-0.744)
+			#b = -0.933 + (0.0148 + 0.119 * (r_probe / lambda_d)) ** (-0.125)
+		elif "planar" in probe_geom:
+			a = 3.47 * (r_probe / lambda_d) ** (-0.749)
+			b = 0.806 * (r_probe / lambda_d) ** (-0.0692)
 		else:
-			raise Exception('Only cylindrical has been implemented')
-
+			raise Exception('Did not recognize your probe geometry')
+            
+		if probe_geom in ['cylindrical', "spherical"]:
+			if (r_probe / lambda_d < 3) or (r_probe / lambda_d > 50):
+				print("Warning: r_probe / lambda_d = %.2f but should be between 3 and 50 as stated in Table 1 of Beal and Eq. 7 of Lobbia.  Deviating may result in code errors or flawed measurements.  " % (r_probe / lambda_d))  
+		elif probe_geom in ["planar"]:
+			if (r_probe / lambda_d < 10) or (r_probe / lambda_d > 45):
+				print("Warning: r_probe / lambda_d = %.2f but should be between 10 and 45 as stated in Eq. 8 of Lobbia.  Deviating may result in code errors or flawed measurements.  " % (r_probe / lambda_d))  
+		
 		return lambda_d, a, b
 
 	def solve_for_V1(DP_data, xi, a, b, plot=False):
@@ -202,7 +240,7 @@ def analyze_DP_data(	DP_data,
 
 		return V1
 
-	def converge(DP_data, density, temp, a, b, V1, guess_fit_params, plot=False, verbose=False, filename=None, plotall=False):
+	def converge(DP_data, density, temp, a, b, V1, guess_fit_params, bounds, plot=False, verbose=False, filename=None, plotall=False):
 		""" Repeats steps 2 to 4 until convergence """
 
 		densities = [density]
@@ -213,13 +251,13 @@ def analyze_DP_data(	DP_data,
 				print(count)
 
 			# step 2
-			lambda_d, a, b = solve_lambdad_a_b(density, temp)
+			lambda_d, a, b = solve_lambdad_a_b(density, temp, probe_geom=probe_geom)
 
 			# step 3
 			V1 = solve_for_V1(DP_data, xi=temp, a=a, b=b)
 
 			# step 4
-			expanded_fit_params = fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=guess_fit_params, plot=plotall)
+			expanded_fit_params = fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=guess_fit_params, plot=plotall, bounds=bounds)
 			density, temp, Voffset, Ioffset = expanded_fit_params
 			guess_fit_params = expanded_fit_params
 			if verbose:
@@ -243,7 +281,7 @@ def analyze_DP_data(	DP_data,
 			
 		# optional plot
 		if plot is True:
-			fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=guess_fit_params, plot=True)
+			fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=guess_fit_params, plot=True, bounds=bounds)
 			fig = _plt.gcf()
 			ax = fig.get_axes()[0]
 			lambda_d = _lambda_d(temperature_in_eV=temp, density=density)
@@ -261,27 +299,27 @@ def analyze_DP_data(	DP_data,
 	# %% Main
 
 	# step 1 - fit data to eq. 9 and eq. 6 to get a reasonable guess of the temperature and density
-	basic_fit_params = fit_basic_DP_model(DP_data, guesses=guesses, plot=plotall)
+	basic_fit_params = fit_basic_DP_model(DP_data, guesses=guesses, plot=plotall, bounds=bounds)
 	guess_density, guess_temp, Voffset, Ioffset = basic_fit_params
 	if verbose:
 		print('initial fit parameters on basic model:')
 		print(basic_fit_params)
 
 	# step 2 - solve for lambda_d, a, and b
-	lambda_d, a, b = solve_lambdad_a_b(guess_density, guess_temp)
+	lambda_d, a, b = solve_lambdad_a_b(guess_density, guess_temp, probe_geom=probe_geom)
 
 	# step 3 - solve for V1(Vp)
 	V1 = solve_for_V1(DP_data, xi=guess_temp, a=a, b=b, plot=plotall)
 
 	# step 4 - solve for updated temperature and density values
-	expanded_fit_params = fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=basic_fit_params, plot=plotall)
+	expanded_fit_params = fit_expanded_DP_model(DP_data, a=a, b=b, V1=V1, guesses=basic_fit_params, plot=plotall, bounds=bounds)
 	density, temp, Voffset, Ioffset = expanded_fit_params
 	if verbose:
 		print('initial fit parameters on expanded model:')
 		print(expanded_fit_params)
 
 	# step 5 - iterate on steps 2 to 4 until convergence
-	density, temp_in_eV, fit = converge(DP_data, density, temp, a, b, V1, expanded_fit_params, plot=plot, plotall=plotall, filename=filename, verbose=verbose)
+	density, temp_in_eV, fit = converge(DP_data, density, temp, a, b, V1, expanded_fit_params, plot=plot, plotall=plotall, filename=filename, verbose=verbose, bounds=bounds)
 
 	return density, temp_in_eV, fit
 
@@ -321,7 +359,7 @@ if __name__ == '__main__':
 		probe_radius = probe_diameter / 2
 		probe_area = (_np.pi * probe_diameter * probe_length + _np.pi * probe_diameter**2 / 4)
 		
-		analyze_DP_data(	IV, 
+		analyze_DP_data(	DP_data=IV, 
 							probe_area=probe_area, 
 							probe_radius=probe_radius, 
 							m_i=_M_XE, 
@@ -330,6 +368,8 @@ if __name__ == '__main__':
 							filename=None, 
 							plotall=False,
 							verbose=False,
+                            density_fit_lims=[-_np.infty, _np.infty],
+                            TeV_fit_lims=[-_np.infty, _np.infty],
 							)
 		fig = _plt.gcf()
 		fig.savefig('dataset1.png', dpi=150)
