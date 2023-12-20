@@ -31,7 +31,7 @@ def analyze_DP_data(    DP_data,
                         m_i, #m_i=_M_XE, 
                         probe_geom, #probe_geom='cylindrical',
                         V_lim=[], 
-                        guesses=(1e17, 2, 0, 0),  # note: guess-density must be in a log10(density)
+                        guesses=(1e17, 2, 0, 0), 
                         plot=False,
                         filename=None, 
                         plotall=False,
@@ -397,7 +397,7 @@ def analyze_DP_data(    DP_data,
         if type(filename) is not type(None):
             fig.savefig(filename, dpi=150)
                 
-    return fit
+    return fit, final_fit_params
 
 
 if __name__ == '__main__':
